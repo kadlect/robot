@@ -14,18 +14,24 @@ Servo servo_right;
 
 
 void left_servo_run(int d) {
-  if(d != 90) {
+  if(d > 0) {
     servo_left.attach(SERVO_LEFT_PIN);
-    servo_left.write(d);
+    servo_left.write(180);
+  } else if (d < 0) {
+    servo_left.attach(SERVO_LEFT_PIN);
+    servo_left.write(0);
   } else {
     servo_left.detach();
   }
 }
 
 void right_servo_run(int d) {
-  if(d != 90) {
+  if(d > 0) {
     servo_right.attach(SERVO_RIGHT_PIN);
-    servo_right.write(d);
+    servo_right.write(0);
+  } else if (d < 0) {
+     servo_left.attach(SERVO_RIGHT_PIN);
+     servo_left.write(180);
   } else {
     servo_right.detach();
   }
@@ -56,16 +62,22 @@ void loop() {
   state[1] = (sensor[0] << 0) | (sensor[1] << 1) | (sensor[2] << 2);
   //int change = (~state[1]) & (state[0]);
   
-  if(state[0] != state[1]) {
+ // if(state[0] != state[1]) {
     if(0b00000010 == state[1]) {
       left_servo_run(0);
-      right_servo_run(180);
+      right_servo_run(0);
+      delay(1000);
+      left_servo_run(1);
+      right_servo_run(1);
+      delay(1000);
     } else if(0b00000011 == state[1]) {
-      left_servo_run(0);
+      left_servo_run(1);
       right_servo_run(0);
     } else if(0b00000110 == state[1]) {
-      left_servo_run(180);
-      right_servo_run(180);
+      left_servo_run(0);
+      right_servo_run(1);
     }
-  }
+ // }
+  
+  delay(10);
 }
