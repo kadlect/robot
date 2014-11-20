@@ -62,6 +62,8 @@ void setup() {
 
 
 int state[2];
+int mask = 0b00000000;
+boolean masknullify = false;
 
 void loop() {
   int sensor[3];
@@ -80,28 +82,66 @@ void loop() {
  
   state[0] = state[1];
   state[1] = (sensor[0] << 4) | (sensor[1] << 3) | (sensor[2] << 2 | sensor[3] << 1 | sensor[4]);
-  
   state[1] = 0b00011111^state[1];
 
-  Serial.print(sensor[0]);
-  Serial.print(sensor[1]);
-    Serial.print(sensor[2]);
-      Serial.print(sensor[3]);
-  Serial.println(sensor[4]);
+  Serial.print(!sensor[0]);
+  Serial.print(!sensor[1]);
+  Serial.print(!sensor[2]);
+  Serial.print(!sensor[3]);
+  Serial.print(!sensor[4]);
   //Serial.println(state[1]);
+  Serial.print(7);
+  Serial.print(mask);
+  Serial.println(masknullify);
+//  Serial.println(state[1]);
+  
+  
+  
+  //LL & RR sensor logic
+  if (sensor[0]) {
+    mask = 0b00000010;
+    Serial.println(888);
+  }
+  
+  //mask nullifing
+  //if (0b00011011 == state[1]) {
+  //  mask = 0;
+  //}
+  
+  state[1] = mask | state[1];
+  
+  
   
   if(state[0] != state[1]) {
-    if(0b00001010 == state[1]) {
+    if(0b00011011 == state[1]) {
       left_servo_run(1);
       right_servo_run(1);
-    } else if(0b00001000 == state[1] || 0b00001100 == state[1] ) {
+      
+      ///////nullify
+      if (masknullify) {
+        masknullify = false;
+         mask = 0; 
+      }
+    } else if(0b00011001 == state[1] || 0b00011101 == state[1] ) {
       // turn right
       left_servo_run(1);
       right_servo_run(-1);
-    } else if(0b00000010 == state[1] || 0b00000110 == state[1]) {
+      
+      
+      /////nullify
+      if (mask != 0) {
+         masknullify = true; 
+      }
+    } else if(0b00010011 == state[1] || 0b00010111 == state[1]) {
       // turn left
       left_servo_run(-1);
       right_servo_run(1);
+      
+      
+      /////////nulify
+      if (mask != 0) {
+        masknullify = true;
+      }
     }
   }
 }
