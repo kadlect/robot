@@ -1,6 +1,11 @@
 #include <Servo.h>
 #include <Serial.h>
 #
+#define CENTER 0b00011011
+#define RIGHT_CENTER 0b00011001
+#define RIGHT 0b00011101
+#define LEFT_CENTER 0b00010011
+#define LEFT 0b00010111
 #
 #define SERVO_LEFT_PIN 13
 #define SERVO_RIGHT_PIN 12
@@ -113,35 +118,35 @@ void loop() {
   
   
   if(state[0] != state[1]) {
-    if(0b00011011 == state[1]) {
+    if(CENTER == state[1]) {
       left_servo_run(1);
       right_servo_run(1);
       
       ///////nullify
-      if (masknullify) {
-        masknullify = false;
-         mask = 0; 
-      }
-    } else if(0b00011001 == state[1] || 0b00011101 == state[1] ) {
+      //if (masknullify) {
+      //  masknullify = false;
+      //   mask = 0; 
+      //}
+    } else if(RIGHT_CENTER == state[1] || RIGHT == state[1] ) {
       // turn right
       left_servo_run(1);
       right_servo_run(-1);
       
       
       /////nullify
-      if (mask != 0) {
-         masknullify = true; 
-      }
-    } else if(0b00010011 == state[1] || 0b00010111 == state[1]) {
+      //if (mask != 0) {
+      //   masknullify = true; 
+      //}
+    } else if(LEFT_CENTER == state[1] || LEFT == state[1]) {
       // turn left
       left_servo_run(-1);
       right_servo_run(1);
       
       
       /////////nulify
-      if (mask != 0) {
-        masknullify = true;
-      }
+      //if (mask != 0) {
+      //  masknullify = true;
+      //}
     }
   }
 }
