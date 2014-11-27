@@ -7,6 +7,12 @@
 #define LEFT_CENTER 0b00010011 ^ 0b11111111
 #define LEFT 0b00010111 ^ 0b11111111
 #
+#define RR_SENSOR 0b00000001
+#define R_SENSOR   0b00000010
+#define C_SENSOR   0b00000100
+#define L_SENSOR   0b00001000
+#define LL_SENSOR 0b00010000
+#
 #define SERVO_LEFT_PIN 12
 #define SERVO_RIGHT_PIN 13
 #
@@ -86,7 +92,7 @@ void loop() {
  
   state[0] = state[1];
   state[1] = (sensor[0] << 4) | (sensor[1] << 3) | (sensor[2] << 2 | sensor[3] << 1 | sensor[4]);
-  state[1] = 0b11111111^state[1];
+  state[1] = 0b00011111^state[1];
 
   Serial.print(!sensor[0]);
   Serial.print(!sensor[1]);
@@ -95,7 +101,7 @@ void loop() {
   Serial.print(!sensor[4]);
   //Serial.println(state[1]);
   Serial.print(7);
-  Serial.println(mask);
+  Serial.print(state[1]);
 //  Serial.println(state[1]);
   
   //LL & RR sensor logic
@@ -105,18 +111,23 @@ void loop() {
   
   state[1] = mask | state[1];
   
-  if(state[0] != state[1]) {
-    if(CENTER == state[1]) {
-      left_servo_run(1);
-      right_servo_run(1);   
-    } else if(RIGHT_CENTER == state[1] || RIGHT == state[1] ) {
-      // turn right
-      left_servo_run(1);
-      right_servo_run(-1);    
-    } else if(LEFT_CENTER == state[1] || LEFT == state[1]) {
-      // turn left
-      left_servo_run(-1);
-      right_servo_run(1);    
+  //if(state[0] != state[1]) {
+    if(C_SENSOR == state[1]) {
+        left_servo_run(1);
+        right_servo_run(1);   
+    } else if(R_SENSOR == state[1] ||
+                  (R_SENSOR | C_SENSOR) == state[1] ) {
+                    Serial.print("RIGHT");
+        // turn right
+        left_servo_run(1);
+        right_servo_run(-1);    
+    } else if(L_SENSOR == state[1] ||
+                  (L_SENSOR | C_SENSOR) == state[1]) {
+                                        Serial.print("LEDFT");
+        // turn left
+        left_servo_run(-1);
+        right_servo_run(1);    
     }
-  }
+  //}
+  Serial.println();
 }
