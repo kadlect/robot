@@ -1,11 +1,7 @@
 #include <Servo.h>
 #include <Serial.h>
 #
-#define CENTER 0b00011011 ^ 0b11111111
-#define RIGHT_CENTER 0b00011001 ^ 0b11111111
-#define RIGHT 0b00011101 ^ 0b11111111
-#define LEFT_CENTER 0b00010011 ^ 0b11111111
-#define LEFT 0b00010111 ^ 0b11111111
+#define NULL_MASK 255
 #
 #define RR_SENSOR 0b00000001
 #define R_SENSOR   0b00000010
@@ -21,6 +17,10 @@
 #define SENSOR_CENTER_PIN 5
 #define SENSOR_RIGHT_PIN 4
 #define SENSOR_RR_PIN 3
+#
+#define NORMAL_STATE 0
+#define RIGHT_BRANCH 1
+#define LEFT_BRANCH 2
 
 Servo servo_left;
 Servo servo_right;
@@ -72,8 +72,9 @@ void setup() {
 
 
 
-int state[2];
-int mask = 0b00000000;
+int sensors;
+int state;
+int mask = 0b11111111;
 
 void loop() {
   int sensor[3];
@@ -90,9 +91,8 @@ void loop() {
   
   
  
-  state[0] = state[1];
-  state[1] = (sensor[0] << 4) | (sensor[1] << 3) | (sensor[2] << 2 | sensor[3] << 1 | sensor[4]);
-  state[1] = 0b00011111^state[1];
+  sensors = (sensor[0] << 4) | (sensor[1] << 3) | (sensor[2] << 2 | sensor[3] << 1 | sensor[4]);
+  sensors = 0b00011111^sensors;
 
   Serial.print(!sensor[0]);
   Serial.print(!sensor[1]);
@@ -101,29 +101,41 @@ void loop() {
   Serial.print(!sensor[4]);
   //Serial.println(state[1]);
   Serial.print(7);
-  Serial.print(state[1]);
+  Serial.print(mask);
 //  Serial.println(state[1]);
   
   //LL & RR sensor logic
-  if (!sensor[0]) {
-    mask = 0b00000010;
+  if ((LL_SENSOR | C_SENSOR) == sensors) {
+    if (mask == NULL_MASK) {
+      mask = 0b11111101;
+    }
   }
   
-  state[1] = mask | state[1];
+  if (RR_SENSOR & sensors) {
+    if (mask != NULL_MASK) {
+      mask  = 0b11111111;
+      state = LEFT_BRANCH;
+    } else {
+      //mask = 0b11110111;
+    }
+  }
+  
+  sensors = mask & sensors;
   
   //if(state[0] != state[1]) {
-    if(C_SENSOR == state[1]) {
+    if(C_SENSOR == sensors) {
         left_servo_run(1);
         right_servo_run(1);   
-    } else if(R_SENSOR == state[1] ||
-                  (R_SENSOR | C_SENSOR) == state[1] ) {
-                    Serial.print("RIGHT");
+    } else if( ( R_SENSOR == sensors ||
+                  (R_SENSOR | C_SENSOR) == sensors ) &&
+                  state != LEFT_BRANCH) {
+              Serial.print("RIGHT");
         // turn right
         left_servo_run(1);
         right_servo_run(-1);    
-    } else if(L_SENSOR == state[1] ||
-                  (L_SENSOR | C_SENSOR) == state[1]) {
-                                        Serial.print("LEDFT");
+    } else if(L_SENSOR == sensors ||
+                  (L_SENSOR | C_SENSOR) == sensors ) {
+        Serial.print("LEDFT");
         // turn left
         left_servo_run(-1);
         right_servo_run(1);    
