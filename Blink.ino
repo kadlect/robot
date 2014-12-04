@@ -180,12 +180,20 @@ if ((LL_SENSOR | C_SENSOR) == sensors) {
   }
   
   
-  //
-  // Jedeme po care bez odbocek
-  //
+  
+  // Na urcitych senzorech nevidime caru nikdy
+  // pr.: pokud mask = 0b00000001, pak RR_SENSOR neuvidi nikdy caru.
   sensors = mask & sensors;
+  
+  // Na urcitych senzorech vydime caru vzdy
+  // pr.: pokud mask = 0b00000001, pak RR_SENSOR uvidi vzdy caru.
   sensors = mask_pos | sensors;
   
+  
+  
+  //
+  // Jedeme po care bez odbocek (FUNGUJE :))
+  //
   if(C_SENSOR == sensors) {
        left_servo_run(1);
        right_servo_run(1);
