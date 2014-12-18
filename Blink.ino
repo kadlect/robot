@@ -1,5 +1,5 @@
 #include <Servo.h>
-#include <Serial.h>
+#include <SoftwareSerial.h>
 #
 #define NULL_MASK 255
 #
@@ -25,6 +25,7 @@
 #define LEFT_BRANCH 4
 #define EXITED_LEFT_BRANCH 5
 #define EXITED_RIGHT_BRANCH 6
+#define EXITING_BRANCH 7
 
 Servo servo_left;
 Servo servo_right;
@@ -137,11 +138,21 @@ Serial.print("EXITED_RIGHT_BRANCH");
   //
   // Jedeme do leva
   //
-if ((LL_SENSOR | C_SENSOR) == sensors) {
+if ((LL_SENSOR & C_SENSOR) == sensors) {
     if (mask == NULL_MASK) {
       mask = 0b11111101;
       state = PREPARE_LEFT_BRANCH;
     }
+    
+    if (state == PREPARE_RIGHT_BRANCH) {
+       state = RIGHT_BRANCH;
+       timestamp = millis();   
+    }
+    if(state == RIGHT_BRANCH && ( millis() > (timestamp + 700)) ) {
+        mask = 0b11100111;
+        state  = EXITING_BRANCH;
+    }
+    
   }
   
   //
@@ -155,12 +166,18 @@ if ((LL_SENSOR | C_SENSOR) == sensors) {
        state = LEFT_BRANCH;
        timestamp = millis();   
     }
-    if(state == LEFT_BRANCH && ( millis() > (timestamp + 700)) ) {
+    if(state == LEFT_BRANCH && ( millis() > (timestamp + 1200)) ) {
         mask = 0b11111100;
-        state  = EXITED_LEFT_BRANCH;
+        state  = EXITING_BRANCH;
     }
   }
   
+  if (state == EXITING_BRANCH && (sensors == C_SENSOR)) {
+     state = NORMAL_STATE;
+     mask = NULL_MASK; 
+  }
+  
+  /*
   if (state == EXITED_LEFT_BRANCH || state == EXITED_RIGHT_BRANCH) {
     if (sensors == 0) {
       
@@ -174,19 +191,14 @@ if ((LL_SENSOR | C_SENSOR) == sensors) {
       
     }
   }
-  
-  if (C_SENSOR == sensors && (state == EXITED_LEFT_BRANCH || state == EXITED_RIGHT_BRANCH)) {
-      mask_pos = 0b0000000;
-  }
-  
-  
+  */
   
   // Na urcitych senzorech nevidime caru nikdy
-  // pr.: pokud mask = 0b00000001, pak RR_SENSOR neuvidi nikdy caru.
+  // pr.: pokud mask = 0b11111110, pak RR_SENSOR neuvidi nikdy caru.
   sensors = mask & sensors;
   
   // Na urcitych senzorech vydime caru vzdy
-  // pr.: pokud mask = 0b00000001, pak RR_SENSOR uvidi vzdy caru.
+  // pr.: pokud mask_pos = 0b00000001, pak RR_SENSOR uvidi vzdy caru.
   sensors = mask_pos | sensors;
   
   
