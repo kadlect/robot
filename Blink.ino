@@ -8,6 +8,9 @@
 #define C_SENSOR   0b00000100
 #define L_SENSOR   0b00001000
 #define LL_SENSOR 0b00010000
+#define LL_L_C_SENSOR 0b00011100
+#define RR_R_C_SENSOR 0b00000111//RR_SENSOR | R_SENSOR | C_SENSOR
+#define LL_C_RR_SENSOR 0b00010101
 #
 #define SERVO_LEFT_PIN 13
 #define SERVO_RIGHT_PIN 12
@@ -18,19 +21,18 @@
 #define SENSOR_RIGHT_PIN 4
 #define SENSOR_RR_PIN 3
 #
-#define NORMAL_STATE 0
-#define PREPARE_LEFT_BRANCH 1
-#define PREPARE_RIGHT_BRANCH 2
-#define RIGHT_BRANCH 3
-#define LEFT_BRANCH 4
-#define EXITED_LEFT_BRANCH 5
-#define EXITED_RIGHT_BRANCH 6
-#define EXITING_BRANCH 7
+#define START 0
+#define NORMAL_STATE 1
+#define PREPARE_BRANCH 2
+#define BRANCH 3
+#define EXITING_BRANCH 4
+#define STOPPED 5
+
+#define LEFT_BRANCH 0
+#define RIGHT_BRANCH 1
 
 Servo servo_left;
 Servo servo_right;
-
-
 
 void left_servo_run(int d) {
   if(d > 0) {
@@ -79,6 +81,7 @@ void setup() {
 
 int sensors;
 int state;
+int branch;
 int mask = 0b11111111;
 int mask_pos = 0b00000000;
 unsigned long timestamp;
@@ -95,10 +98,8 @@ void loop() {
   // Cerna pohlcuje ---> 0
   // Bila odrazi    ---> 1
   //
-  // Je nutno provest krekci...
+  // Je nutno provest korekci...
   
-  
- 
   sensors = (sensor[0] << 4) | (sensor[1] << 3) | (sensor[2] << 2 | sensor[3] << 1 | sensor[4]);
   sensors = 0b00011111^sensors;
 
@@ -108,120 +109,133 @@ void loop() {
   Serial.print(!sensor[3]);
   Serial.print(!sensor[4]);
   //Serial.println(state[1]);
-  Serial.print(7);
-  Serial.print(mask);
+  Serial.print(" ");
+  for (int i = 4; i >= 0; --i) {
+   Serial.print((mask >> i) & 1); 
+  }
+  Serial.print(" ");
 //  Serial.println(state[1]);
-
-//Print surrent state
-if (state == NORMAL_STATE){
-Serial.print("NORMAL_STATE");
-}
-if (state == PREPARE_RIGHT_BRANCH){
-Serial.print("PREPARE_RIGHT_BRANCH");
-}
-if (state == PREPARE_LEFT_BRANCH){
-Serial.print("PREPARE_LEFT_BRANCH");
-}
-if (state == RIGHT_BRANCH){
-Serial.print("RIGHT_BRANCH");
-}
-if (state == LEFT_BRANCH){
-Serial.print("LEFT_BRANCH");
-}
-if (state == EXITED_LEFT_BRANCH){
-Serial.print("EXITED_LEFT_BRANCH");
-}
-if (state == EXITED_RIGHT_BRANCH){
-Serial.print("EXITED_RIGHT_BRANCH");
-}
    
-  //
-  // Jedeme do leva
-  //
-if ((LL_SENSOR & C_SENSOR) == sensors) {
-    if (mask == NULL_MASK) {
-      mask = 0b11111101;
-      state = PREPARE_LEFT_BRANCH;
-    }
-    
-    if (state == PREPARE_RIGHT_BRANCH) {
-       state = RIGHT_BRANCH;
-       timestamp = millis();   
-    }
-    if(state == RIGHT_BRANCH && ( millis() > (timestamp + 700)) ) {
-        mask = 0b11100111;
-        state  = EXITING_BRANCH;
-    }
-    
-  }
-  
-  //
-  // Jedeme do prava
-  //
-  if (RR_SENSOR & sensors) {
-    if (mask != NULL_MASK) {
-      mask = 0b11111111;
-    }
-    if (state == PREPARE_LEFT_BRANCH) {
-       state = LEFT_BRANCH;
-       timestamp = millis();   
-    }
-    if(state == LEFT_BRANCH && ( millis() > (timestamp + 1200)) ) {
-        mask = 0b11111100;
-        state  = EXITING_BRANCH;
-    }
-  }
-  
-  if (state == EXITING_BRANCH && (sensors == C_SENSOR)) {
+   if (state == START) {
+    if (sensors == C_SENSOR){
      state = NORMAL_STATE;
-     mask = NULL_MASK; 
-  }
-  
-  /*
-  if (state == EXITED_LEFT_BRANCH || state == EXITED_RIGHT_BRANCH) {
-    if (sensors == 0) {
-      
-      // kdyz nic nevidi => zachovej se podle predchoziho branche
-      if (state == EXITED_LEFT_BRANCH) {
-        mask_pos = R_SENSOR;
-      } else {
-        mask_pos = L_SENSOR;
-      }
-      
-      
+    } 
+   }
+   
+   if (state == NORMAL_STATE) {
+     Serial.print("NORMAL_STATE");
+    if ( (sensors & 0b00001110) == C_SENSOR) {
+      check_sides();
     }
+   }
+   if (state == PREPARE_BRANCH) {
+     Serial.print("PREPARE_BRANCH");
+     Serial.print(sensors & R_SENSOR != 0);
+     if ( (branch == LEFT_BRANCH) && (sensors & R_SENSOR) ) {
+       state = BRANCH;
+     }
+     if ( (branch == RIGHT_BRANCH) && (sensors & L_SENSOR) ) {
+       state = BRANCH;
+     }
+   }
+   
+   if ( (state == BRANCH)) {
+     Serial.print("BRANCH");
+     // we just entered the branch (passed the junction)
+     if (sensors == C_SENSOR) {
+       mask = NULL_MASK;
+     }
+     // we get into closing junction (end of branch)
+     if ( (sensors == LL_L_C_SENSOR) || (sensors == RR_R_C_SENSOR) ) {
+       if (mask == NULL_MASK) {
+         enter_closing_junction();
+       }
+     }
+   }
+   
+   if (state == EXITING_BRANCH) {
+     Serial.print("EXITING_BRANCH");
+     // exiting closing junction
+     if (sensors == C_SENSOR) {
+       close_branch();
+     } 
+   }
+   
+   if (sensors == LL_C_RR_SENSOR) {
+     state = STOPPED;
+     stop_servos();
+   }
+    
+  if (state != NORMAL_STATE) {
+    Serial.print(" ");
+   if (branch == LEFT_BRANCH) {
+    Serial.print("L");
+   } else {
+    Serial.print("R");
+   }
   }
-  */
-  
-  // Na urcitych senzorech nevidime caru nikdy
-  // pr.: pokud mask = 0b11111110, pak RR_SENSOR neuvidi nikdy caru.
-  sensors = mask & sensors;
-  
-  // Na urcitych senzorech vydime caru vzdy
-  // pr.: pokud mask_pos = 0b00000001, pak RR_SENSOR uvidi vzdy caru.
-  sensors = mask_pos | sensors;
-  
-  
-  
-  //
-  // Jedeme po care bez odbocek (FUNGUJE :))
-  //
-  if(C_SENSOR == sensors) {
-       left_servo_run(1);
-       right_servo_run(1);
-  } else if( ( R_SENSOR == sensors ||
-                (R_SENSOR | C_SENSOR) == sensors ) &&
-                 state != LEFT_BRANCH) {
-              Serial.print("RIGHT");
-        // turn right
-        left_servo_run(1);
-        right_servo_run(-1);    
-    } else if(L_SENSOR == sensors ||
-                  (L_SENSOR | C_SENSOR) == sensors ) {
-        Serial.print("LEDFT");
-        // turn left
-        left_servo_run(-1);
-        right_servo_run(1);    
-    }
-  Serial.println();
+  Serial.print(" = ");
+  Serial.print(sensors == LL_L_C_SENSOR);
+  Serial.print(" = ");
+  Serial.print(sensors == RR_R_C_SENSOR);
+  Serial.print(" = ");
+   sensors = sensors & mask;
+   follow_line(); 
+  Serial.println(); 
 }
+
+void enter_closing_junction() {
+  if (BRANCH == LEFT_BRANCH) {
+    mask = 0b00011101; 
+  } else {
+    mask = 0b00010111; 
+  }
+  state = EXITING_BRANCH;
+}
+
+void close_branch() {
+   mask = NULL_MASK;
+   state = NORMAL_STATE;
+}
+
+void check_sides() {
+  if (sensors & (LL_SENSOR | RR_SENSOR) ) {
+    state = PREPARE_BRANCH; 
+    // determine which branch will follow
+    if (sensors & LL_SENSOR) {
+      branch = LEFT_BRANCH;
+      mask = 0b00011101;
+    } else {
+      branch = RIGHT_BRANCH;
+      mask = 0b00010111;
+    }
+    
+  }
+}
+
+void follow_line() {
+  if (state == STOPPED)
+    return;
+    
+  Serial.print("\t\t\t GO  ->  ");  
+  if (sensors & L_SENSOR) {
+    Serial.print("LEFT");
+    left_servo_run(-1);
+    right_servo_run(1); 
+  } else
+  if(sensors & R_SENSOR) {
+    Serial.print("RIGHT");
+    left_servo_run(1);
+    right_servo_run(-1); 
+  } else
+  if (sensors & C_SENSOR) { 
+    Serial.print("STRAIGHT");
+    left_servo_run(1);
+    right_servo_run(1); 
+  }
+}
+
+ void stop_servos() {
+  left_servo_run(0);
+  right_servo_run(0); 
+ }
