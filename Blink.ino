@@ -9,8 +9,9 @@
 #define L_SENSOR   0b00001000
 #define LL_SENSOR 0b00010000
 #define LL_L_C_SENSOR 0b00011100
-#define RR_R_C_SENSOR 0b00000111//RR_SENSOR | R_SENSOR | C_SENSOR
+#define RR_R_C_SENSOR 0b00000111
 #define LL_C_RR_SENSOR 0b00010101
+#define L_C_R_SENSOR 0b00001110
 #
 #define SERVO_LEFT_PIN 13
 #define SERVO_RIGHT_PIN 12
@@ -27,9 +28,11 @@
 #define BRANCH 3
 #define EXITING_BRANCH 4
 #define STOPPED 5
-
+#
 #define LEFT_BRANCH 0
 #define RIGHT_BRANCH 1
+#
+#define ARCHIVE_SIZE 6
 
 Servo servo_left;
 Servo servo_right;
@@ -78,16 +81,15 @@ void setup() {
 }
 
 
-
+int archived_sensors[ARCHIVE_SIZE] = {0};
 int sensors;
 int state;
 int branch;
 int mask = 0b11111111;
-int mask_pos = 0b00000000;
-unsigned long timestamp;
+int sensor[5];
+int history;
 
 void loop() {
-  int sensor[3];
   sensor[0] = digitalRead(SENSOR_LL_PIN);
   sensor[1] = digitalRead(SENSOR_LEFT_PIN);
   sensor[2] = digitalRead(SENSOR_CENTER_PIN);
@@ -102,6 +104,10 @@ void loop() {
   
   sensors = (sensor[0] << 4) | (sensor[1] << 3) | (sensor[2] << 2 | sensor[3] << 1 | sensor[4]);
   sensors = 0b00011111^sensors;
+
+  shift(archived_sensors);
+  archived_sensors[ARCHIVE_SIZE-1] = sensors;
+  history = get_sensors_history();
 
   Serial.print(!sensor[0]);
   Serial.print(!sensor[1]);
@@ -131,10 +137,10 @@ void loop() {
    if (state == PREPARE_BRANCH) {
      Serial.print("PREPARE_BRANCH");
      Serial.print(sensors & R_SENSOR != 0);
-     if ( (branch == LEFT_BRANCH) && (sensors & R_SENSOR) ) {
+     if ( (branch == LEFT_BRANCH) && (history & R_SENSOR) ) {
        state = BRANCH;
      }
-     if ( (branch == RIGHT_BRANCH) && (sensors & L_SENSOR) ) {
+     if ( (branch == RIGHT_BRANCH) && (history & L_SENSOR) ) {
        state = BRANCH;
      }
    }
@@ -146,11 +152,11 @@ void loop() {
        mask = NULL_MASK;
      }
      // we get into closing junction (end of branch)
-     if ( (sensors == LL_L_C_SENSOR) || (sensors == RR_R_C_SENSOR) ) {
-       if (mask == NULL_MASK) {
-         enter_closing_junction();
-       }
-     }
+     
+   if (mask == NULL_MASK) {
+     check_for_closing_junction();
+   }
+     
    }
    
    if (state == EXITING_BRANCH) {
@@ -161,7 +167,7 @@ void loop() {
      } 
    }
    
-   if (sensors == LL_C_RR_SENSOR) {
+   if (history == LL_C_RR_SENSOR) {
      state = STOPPED;
      stop_servos();
    }
@@ -175,22 +181,28 @@ void loop() {
    }
   }
   Serial.print(" = ");
-  Serial.print(sensors == LL_L_C_SENSOR);
-  Serial.print(" = ");
-  Serial.print(sensors == RR_R_C_SENSOR);
+  for (int i = 4; i >= 0; --i) {
+   Serial.print((history >> i) & 1); 
+  }
   Serial.print(" = ");
    sensors = sensors & mask;
    follow_line(); 
   Serial.println(); 
 }
 
-void enter_closing_junction() {
-  if (BRANCH == LEFT_BRANCH) {
+void check_for_closing_junction() {
+  Serial.print("*");
+  Serial.print(sensors == RR_R_C_SENSOR);
+  Serial.print("*");
+  Serial.print(branch == LEFT_BRANCH);
+  Serial.print("*");
+  if ( (sensors & RR_R_C_SENSOR == RR_R_C_SENSOR) && (branch == LEFT_BRANCH) ) {
     mask = 0b00011101; 
-  } else {
+    state = EXITING_BRANCH;
+  } else if ( (sensors & LL_L_C_SENSOR == LL_L_C_SENSOR) && (branch == RIGHT_BRANCH) ) {
     mask = 0b00010111; 
+    state = EXITING_BRANCH;
   }
-  state = EXITING_BRANCH;
 }
 
 void close_branch() {
@@ -214,28 +226,64 @@ void check_sides() {
 }
 
 void follow_line() {
-  if (state == STOPPED)
-    return;
     
-  Serial.print("\t\t\t GO  ->  ");  
+  Serial.print("\t\t\t GO  ->  "); 
+
+  if (state == STOPPED){
+   Serial.print("STOPPED");
+    return;
+  }
+  
+  if ((history & L_C_R_SENSOR) == L_C_R_SENSOR) {
+   go(1,1);
+   Serial.print("STRAIGHT"); 
+   return;
+  }
+  Serial.print(sensors);
+  /*if (sensors == 0) {
+   if (branch == LEFT_BRANCH){
+     Serial.print("RIGHT");
+    go(1,-1);
+   } else {
+     Serial.print("RIGHT");
+    go(-1,1);
+   } 
+  }*/
+ 
   if (sensors & L_SENSOR) {
     Serial.print("LEFT");
-    left_servo_run(-1);
-    right_servo_run(1); 
+    go(-1,1);
   } else
   if(sensors & R_SENSOR) {
     Serial.print("RIGHT");
-    left_servo_run(1);
-    right_servo_run(-1); 
+    go(1,-1);
   } else
   if (sensors & C_SENSOR) { 
     Serial.print("STRAIGHT");
-    left_servo_run(1);
-    right_servo_run(1); 
+    go(1,1);
   }
+}
+
+void go(int left_speed, int right_speed) {
+  left_servo_run(left_speed);
+  right_servo_run(right_speed);
 }
 
  void stop_servos() {
   left_servo_run(0);
   right_servo_run(0); 
+ }
+ 
+ void shift(int *arr) {
+  for (int i = 0; i < ARCHIVE_SIZE-1; ++i) {
+   arr[i] = arr[i+1];
+  } 
+ }
+ 
+ int get_sensors_history() {
+   int buf;
+   for (int i =0; i < ARCHIVE_SIZE; ++i) {
+    buf |= archived_sensors[i]; 
+   }
+   return buf;
  }
